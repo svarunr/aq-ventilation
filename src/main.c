@@ -30,20 +30,21 @@
 sensor t_sensor;
 
 float   ep,
-		ei = 0,
-		ed,
-		pid_out,
-		placeh;
+	ei = 0,
+	ed,
+	pid_out,
+	placeh;
 uint8_t Kp = 100,
-		Ki = 2,
-		Kd = 1,
-		counter = 0;
+	Ki = 2,
+	Kd = 1,
+	counter = 0;
 
 motor_mode LO = LOW;
 motor_mode HI = HIGH;
 
 void MRT0_IRQHandler(void) {
 
+	// Check MRT trigger channel.
 	if(MRT0->IRQ_FLAG&(1<<MRT_GFLAG0)){
 		// REMEMBER THAT CLEARING THE FLAG IS IMPORTANT.
 		MRT0->CHANNEL[0].STAT = MRT_CHANNEL_STAT_INTFLAG_MASK;	
@@ -131,9 +132,11 @@ void PIN_INT0_IRQHandler(void) {
 	
 	PINT->IST = 0x01;
 
+	// Caculate the speed of the motor, accounting for gearing ratio.
 	ma.position++;
 	if (ma.tim >= 100) {
 		ma.speed = (uint8_t) 30*(ma.position)/334;
+		// Reset the position and time variables for next datum.
 		ma.position = 0;
 		ma.tim = 0; }
 }
@@ -142,17 +145,21 @@ void PIN_INT1_IRQHandler(void) {
 
 	PINT->IST = 0x02;
 
+	// If the button is pressed, increment flag counter.
 	counter++;
 	oled.stat |= (SSD1306_WRITE_MASK | SSD1306_STATE_MASK);
 
 	if (~(t_sensor.pid) & (counter > 0)) {
+		// Set the fan speed to low.
 		if (counter == LO) {
 			CTIMER0->MR[0]  = (int) ((0.5)*INIT_COUNT_CTIMER);
 			CTIMER0->TCR   |= (CTIMER_TCR_CEN_MASK);
 		}
+		// Set the fan speed to high.
 		else if (counter == HI) {
 			CTIMER0->MR[0]  = (int) ((1)*INIT_COUNT_CTIMER);
 		}
+		// Set the fan speed to auto.
 		else {
 			CTIMER0->MR[0]  = (int) ((0)*INIT_COUNT_CTIMER);
 			//CTIMER0->TCR   &= ~(CTIMER_TCR_CEN_MASK);
@@ -179,25 +186,32 @@ int main(void) {
 	BOARD_BootClockFRO24M();
 
 
+	// Enable the Multi Rate Timer module.
 	SYSCON->SYSAHBCLKCTRL0 |= (SYSCON_SYSAHBCLKCTRL0_MRT_MASK);
 	SYSCON->PRESETCTRL0    &= ~(SYSCON_PRESETCTRL0_MRT_RST_N_MASK);
 	SYSCON->PRESETCTRL0    |= (SYSCON_PRESETCTRL0_MRT_RST_N_MASK);
 
+	// Set the default MRT counter values.
 	MRT0->CHANNEL[0].CTRL = (MRT_REPEAT << MRT_CHANNEL_CTRL_MODE_SHIFT | MRT_CHANNEL_CTRL_INTEN_MASK);
 	MRT0->CHANNEL[0].INTVAL = IVALUE_CH0 &~ (MRT_CHANNEL_INTVAL_LOAD_MASK);
 
 
+	// Turn on the Switch Matrix.
 	SYSCON->SYSAHBCLKCTRL0 |= (SYSCON_SYSAHBCLKCTRL0_SWM_MASK);
 
+	// Turn on the CTimer module.
 	SYSCON->SYSAHBCLKCTRL0 |= (SYSCON_SYSAHBCLKCTRL0_CTIMER0_MASK);
 	SYSCON->PRESETCTRL0    &= ~(SYSCON_PRESETCTRL0_CTIMER0_RST_N_MASK);
 	SYSCON->PRESETCTRL0    |= (SYSCON_PRESETCTRL0_CTIMER0_RST_N_MASK);
 
+	// Assign pins for the motor feedback signals.
 	SWM0->PINASSIGN.PINASSIGN4 &= ~(0xFF);
 	SWM0->PINASSIGN.PINASSIGN4 |=  (MOTORB);
 
+	// Turn off the Switch Matrix.
 	SYSCON->SYSAHBCLKCTRL0 &= ~(SYSCON_SYSAHBCLKCTRL0_SWM_MASK);
 
+	// Set default values for the CTimer.
 	CTIMER0->EMR   |= CTIMER_EMR_EM0_MASK;
 	CTIMER0->PWMC  |= CTIMER_PWMC_PWMEN0_MASK;
 	CTIMER0->MCR   &= ~(CTIMER_MCR_MR0R_MASK | CTIMER_MCR_MR0S_MASK | CTIMER_MCR_MR0I_MASK);
@@ -214,6 +228,7 @@ int main(void) {
 	i2c_init();
 
 
+	// Initialize the display.
 	ssd1306_init();
 	ssd1306_displaystr(SSD1306_INIT_GOOD);
 	ssd1306_displaystr(LM75_INIT_GOOD);
@@ -222,16 +237,18 @@ int main(void) {
 	ssd1306_clear();
 	i2c_stoptx();
 
+	// Set motor flags and counters to zero.
 	ma.pwm = 0;
 	ma.position = 0;
 	ma.speed = 0;
 
+	// Turn off the display initially and set the display status flag to 0.
 	i2c_starttx(SSD1306_ADDRESS);
 	ssd1306_lowpowermode(0);
 	oled.stat &= ~(SSD1306_STATE_MASK);
 
 	// Initialize the WKT.
-    WKT_Config();
+    	WKT_Config();
 	// Enable the interrupts.
 	NVIC_EnableIRQ(SysTick_IRQn);
 	NVIC_EnableIRQ(MRT0_IRQn);
@@ -239,17 +256,24 @@ int main(void) {
 
 	// Main loop.
 	while(1) {
+		
+		// Check if there is something to display on the OLED.
 		if ((oled.stat) == (SSD1306_WRITE_MASK | SSD1306_STATE_MASK | SSD1306_INIT_MASK)) {
 
+			// Base case, OLED is off.
 			if (oled.timeout == 0) {
 				i2c_starttx(SSD1306_ADDRESS);
 				ssd1306_lowpowermode(1);
 			}
 
+			// Else, display the sensor data.
 			oled.currenty = 0;
 			ssd1306_displaynum(t_sensor.dat);
 
+			// Increment the display position index.
 			oled.currenty = 2;
+
+			// Display the current fan setting.
 			if (counter == HI) {
 				ssd1306_displaystr("Mode: HIGH ");
 			}
@@ -261,6 +285,8 @@ int main(void) {
 			}
 			oled.stat &= ~(SSD1306_WRITE_MASK);
 		}
+
+		// Turn off the OLED.
 		if (oled.timeout >= 8) {
 			i2c_starttx(SSD1306_ADDRESS);
 			ssd1306_lowpowermode(0);
