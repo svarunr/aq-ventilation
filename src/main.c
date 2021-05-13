@@ -260,7 +260,7 @@ int main(void) {
 		// Check if there is something to display on the OLED.
 		if ((oled.stat) == (SSD1306_WRITE_MASK | SSD1306_STATE_MASK | SSD1306_INIT_MASK)) {
 
-			// Base case, OLED is off.
+			// Turn the OLED on.
 			if (oled.timeout == 0) {
 				i2c_starttx(SSD1306_ADDRESS);
 				ssd1306_lowpowermode(1);
