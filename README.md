@@ -4,3 +4,6 @@ The air quality based ventilation system was a project that I had created for th
 The system was required to sense the concentration of Volatile Organic Compounds (VOCs) in the air and turn on a ventilation fan when a certain threshold is reached. The system would also output the current VOC concentration in the air using the SSD1306 I2C display along with the current motor speed for quick reference.
 
 I decided to jump right into the deep end with this project since I wanted to learn the ins and outs of embedded system design and the intricacies and nuances that go into establishing communication with other systems in a network.
+
+# Software Architecture
+![sw](https://user-images.githubusercontent.com/55810700/118198424-d4f86800-b41e-11eb-82b8-5a61573a2cb8.png)
